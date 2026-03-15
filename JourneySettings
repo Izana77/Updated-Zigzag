@@ -1,0 +1,66 @@
+package src;
+/**
+ * JourneySettings stores the length, count and speed for one zigzag journey.
+ * It also handles the calibration calculation to convert distance into move time.
+ */
+public class JourneySettings {
+
+    private int length;     // length of each zigzag section in cm
+    private int count;      // number of zigzag sections
+    private int speed;      // random wheel speed (40 to 100)
+
+    // -----------------------------------------------------------------------
+    // Calibration constants - adjust these after testing on your SwiftBot
+    // -----------------------------------------------------------------------
+
+    // How many centimetres the robot travels per second at wheel speed 100
+    // TODO: measure this by running your robot at speed 100 for 5 seconds
+    //       and dividing the distance travelled by 5
+    public static final double CM_PER_SEC_AT_100 = 30.0;
+
+    /**
+     * Constructor - generates a random speed automatically.
+     */
+    public JourneySettings(int length, int count) {
+        this.length = length;
+        this.count = count;
+        // Random speed between 40 and 100 (whole number)
+        this.speed = 40 + (int)(Math.random() * 61);
+    }
+
+    // -----------------------------------------------------------------------
+    // Getters
+    // -----------------------------------------------------------------------
+
+    public int getLength() {
+        return length;
+    }
+
+    public int getCount() {
+        return count;
+    }
+
+    public int getSpeed() {
+        return speed;
+    }
+
+    /**
+     * Calculates how long the robot needs to move (in milliseconds)
+     * to travel the given distance at the stored speed.
+     *
+     * Formula: time = distance / (speed / 100 * CM_PER_SEC_AT_100)
+     * Then convert seconds to milliseconds.
+     */
+    public int calcMoveTimeMs(int distanceCm) {
+        double cmPerSec = (speed / 100.0) * CM_PER_SEC_AT_100;
+        double seconds = distanceCm / cmPerSec;
+        return (int)(seconds * 1000);
+    }
+
+    /**
+     * Total outward path length (all sections added together, not including return).
+     */
+    public double getTotalOutwardDistance() {
+        return (double) length * count;
+    }
+}
