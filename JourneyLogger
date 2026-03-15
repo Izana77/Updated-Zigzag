@@ -1,0 +1,63 @@
+package src;
+import java.io.FileWriter;
+import java.io.PrintWriter;
+import java.io.IOException;
+
+/**
+ * JourneyLogger writes journey information to a text file after each run.
+ * Each journey's data is appended to the same file throughout the session.
+ */
+public class JourneyLogger {
+
+    private String logPath;
+    private int journeyNumber;
+
+    public JourneyLogger() {
+        // Create a simple log filename using the current time in milliseconds
+        // so each session gets its own file
+        this.logPath = "zigzag_log_" + System.currentTimeMillis() + ".txt";
+        this.journeyNumber = 0;
+
+        // Write the file header
+        try {
+            PrintWriter pw = new PrintWriter(new FileWriter(logPath, true));
+            pw.println("==================================================");
+            pw.println("  SWIFTBOT ZIGZAG LOG FILE");
+            pw.println("==================================================");
+            pw.close();
+        } catch (IOException e) {
+            System.out.println("[ERROR] Could not create log file: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Writes one journey's data to the log file.
+     */
+    public void logJourney(JourneySettings settings,
+                           double outwardDistance,
+                           double durationSeconds,
+                           double straightLineDistance) {
+        journeyNumber++;
+
+        try {
+            PrintWriter pw = new PrintWriter(new FileWriter(logPath, true));
+            pw.println();
+            pw.println("--------------------------------------------------");
+            pw.println("Journey #" + journeyNumber);
+            pw.println("  Section Length      : " + settings.getLength() + " cm");
+            pw.println("  Section Count       : " + settings.getCount());
+            pw.println("  Wheel Speed         : " + settings.getSpeed());
+            pw.println("  Outward Distance    : " + outwardDistance + " cm");
+            pw.println("  Duration (outward)  : " + durationSeconds + " seconds");
+            pw.println("  Straight-Line Dist. : " + straightLineDistance + " cm");
+            pw.println("--------------------------------------------------");
+            pw.close();
+        } catch (IOException e) {
+            System.out.println("[ERROR] Could not write to log file: " + e.getMessage());
+        }
+    }
+
+    public String getLogPath() {
+        return logPath;
+    }
+}
