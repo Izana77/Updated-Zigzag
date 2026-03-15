@@ -1,0 +1,193 @@
+package src;
+/**
+ * ZigzagUI handles all messages displayed to the user via the command line.
+ * It does not handle any input - that is done in Main and ZigzagRobot.
+ */
+public class ZigzagUI {
+
+    // -----------------------------------------------------------------------
+    // Title and startup messages
+    // -----------------------------------------------------------------------
+
+    public void showTitle() {
+        System.out.println("==================================================");
+        System.out.println("      SWIFTBOT ZIGZAG CONTROL SYSTEM");
+        System.out.println("              (UPDATED CODE)          ");
+        System.out.println("==================================================");
+        System.out.println();
+    }
+
+    public void showStartMessage() {
+        System.out.println("[STATUS] System initialising...");
+        System.out.println("[STATUS] SwiftBot ready.");
+        System.out.println("--------------------------------------------------");
+        System.out.println("[INPUT] Please place a QR code in front of the camera.");
+        System.out.println("[INPUT] Expected format: Length-Count");
+        System.out.println("[INPUT] Example: 20-6");
+        System.out.println("--------------------------------------------------");
+    }
+
+    // -----------------------------------------------------------------------
+    // Validation feedback messages
+    // -----------------------------------------------------------------------
+
+    public void showInvalidFormatError() {
+        System.out.println("[ERROR] Invalid format. Please use: Length-Count (e.g. 20-6)");
+    }
+
+    public void showInvalidNumbersError() {
+        System.out.println("[ERROR] Both values must be whole numbers.");
+    }
+
+    public void showLengthRangeError() {
+        System.out.println("[ERROR] Length must be between 15 and 85 cm.");
+    }
+
+    public void showCountRangeError() {
+        System.out.println("[ERROR] Count must be an even number and no more than 12.");
+    }
+
+    public void showValidationSuccess(int length, int count, int speed) {
+        System.out.println("[CHECK] Length is within range (15-85 cm): OK");
+        System.out.println("[CHECK] Section count is even and <= 12: OK");
+        System.out.println("[CONFIG] Wheel speed set to: " + speed);
+        System.out.println("--------------------------------------------------");
+        System.out.println("[SUMMARY] Journey Configuration");
+        System.out.println("--------------------------------------------------");
+        System.out.println("  Section Length : " + length + " cm");
+        System.out.println("  Section Count  : " + count);
+        System.out.println("  Wheel Speed    : " + speed);
+        System.out.println("--------------------------------------------------");
+    }
+
+    // -----------------------------------------------------------------------
+    // Safety mode messages
+    // -----------------------------------------------------------------------
+
+    public void showSafetyEnabled() {
+        System.out.println("[CONFIG] Proximity safety mode: ENABLED");
+    }
+
+    public void showSafetyDisabled() {
+        System.out.println("[CONFIG] Proximity safety mode: DISABLED");
+    }
+
+    // -----------------------------------------------------------------------
+    // Movement progress messages
+    // -----------------------------------------------------------------------
+
+    public void showSectionStart(int section, int total, String ledColour) {
+        System.out.println("[MOVE] Section " + section + " of " + total);
+        System.out.println("[LED]  " + ledColour);
+        System.out.println("[MOVE] Moving forward...");
+    }
+
+    public void showTurning(String direction) {
+        System.out.println("[MOVE] Turning 90 degrees " + direction + ".");
+    }
+
+    public void showOutwardComplete() {
+        System.out.println("--------------------------------------------------");
+        System.out.println("[INFO] Outward zigzag complete.");
+    }
+
+    public void showReturning() {
+        System.out.println("[INFO] Returning to starting position...");
+        System.out.println("--------------------------------------------------");
+        System.out.println("[MOVE] Retracing path using recorded turns...");
+        System.out.println("[LED]  Colours match original journey.");
+    }
+
+    public void showJourneyComplete() {
+        System.out.println("--------------------------------------------------");
+        System.out.println("[INFO] Journey complete.");
+        System.out.println("[LED]  All LEDs turned off.");
+        System.out.println("--------------------------------------------------");
+    }
+
+    // -----------------------------------------------------------------------
+    // Safety stop messages
+    // -----------------------------------------------------------------------
+
+    public void showObstacleDetected() {
+        System.out.println("[WARNING]     Obstacle detected within 15 cm!");
+        System.out.println("[SAFETY]      Emergency stop activated.");
+        System.out.println("[USER ACTION] Please remove the obstacle to continue.");
+    }
+
+    public void showPathClear() {
+        System.out.println("[SAFETY] Path clear. Resuming movement...");
+    }
+
+    // -----------------------------------------------------------------------
+    // Logging messages
+    // -----------------------------------------------------------------------
+
+    public void showLoggingSuccess(double outwardDist, double duration,
+                                   double straightLine, String logPath) {
+        System.out.println("[LOGGING] Writing journey data to file...");
+        System.out.println("  Outward Distance     : " + outwardDist + " cm");
+        System.out.println("  Outward Duration     : " + duration + " seconds");
+        System.out.println("  Straight-Line Dist.  : " + straightLine + " cm");
+        System.out.println("[SUCCESS] Data saved to '" + logPath + "'");
+        System.out.println("--------------------------------------------------");
+    }
+
+    // -----------------------------------------------------------------------
+    // Continue or exit prompt
+    // -----------------------------------------------------------------------
+
+    public void showContinuePrompt() {
+        System.out.println("[PROMPT] What would you like to do next?");
+        System.out.println("  Press button 'Y' to scan another QR code");
+        System.out.println("  Press button 'X' to terminate the program");
+        System.out.println("--------------------------------------------------");
+    }
+
+    // -----------------------------------------------------------------------
+    // Scan prompt (shown before each QR scan attempt)
+    // -----------------------------------------------------------------------
+
+    public void showScanPrompt() {
+        System.out.println("[ACTION] Scanning QR code...");
+    }
+
+    public void showQRDetected(String data) {
+        System.out.println("[SUCCESS] QR code detected: " + data);
+    }
+
+    public void showQRNotFound() {
+        System.out.println("[INFO] No QR code found. Please hold the code in front of the camera.");
+    }
+
+    // -----------------------------------------------------------------------
+    // Session termination summary
+    // -----------------------------------------------------------------------
+
+    public void showSessionSummary(int totalJourneys,
+                                   int maxLength, int maxCount, double maxDist,
+                                   int minLength, int minCount, double minDist,
+                                   String logPath) {
+        System.out.println("==================================================");
+        System.out.println("           SESSION TERMINATION SUMMARY");
+        System.out.println("==================================================");
+        System.out.println("Total Zigzag Journeys Completed: " + totalJourneys);
+        System.out.println();
+        System.out.println("[LONGEST JOURNEY]");
+        System.out.println("  Section Length          : " + maxLength + " cm");
+        System.out.println("  Section Count           : " + maxCount);
+        System.out.println("  Straight-Line Distance  : " + maxDist + " cm");
+        System.out.println();
+        System.out.println("[SHORTEST JOURNEY]");
+        System.out.println("  Section Length          : " + minLength + " cm");
+        System.out.println("  Section Count           : " + minCount);
+        System.out.println("  Straight-Line Distance  : " + minDist + " cm");
+        System.out.println();
+        System.out.println("[FILE SYSTEM]");
+        System.out.println("  Log file location: " + logPath);
+        System.out.println();
+        System.out.println("Thank you for using SwiftBot.");
+        System.out.println("Program terminated successfully.");
+        System.out.println("==================================================");
+    }
+}
