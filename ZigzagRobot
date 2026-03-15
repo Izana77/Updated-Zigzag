@@ -1,0 +1,533 @@
+package src;
+import swiftbot.*;
+import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+
+/**
+ * ZigzagRobot handles all physical robot hardware:
+ * movement, turning, LED colours, ultrasound sensor, QR scanning, and buttons.
+ *
+ * It uses the SwiftBotAPI directly for all hardware calls.
+ */
+public class ZigzagRobot {
+
+    // The SwiftBot API singleton instance
+    private SwiftBotAPI api;
+
+    // Whether the proximity safety feature is turned on
+    private boolean safetyEnabled;
+
+    // -----------------------------------------------------------------------
+    // Calibration constants - MUST be adjusted after physical testing
+    // -----------------------------------------------------------------------
+
+    // How many cm the robot travels per second at wheel speed 100
+    // TODO: test by running at speed 100 for 5 seconds, measure distance, divide by 5
+    private static final double CM_PER_SEC_AT_100 = 30.0;
+
+    // Trim values to make the robot travel in a straight line
+    // TODO: adjust by small amounts (e.g. 0.95 or 1.05) until it goes straight
+    private static final double LEFT_TRIM = 1.0;
+    private static final double RIGHT_TRIM = 1.0;
+
+    // Speed used for turning (not the journey speed)
+    private static final int TURN_SPEED = 60;
+
+    // Time in milliseconds for a 90 degree turn at TURN_SPEED
+    // TODO: test by trial and error until the robot turns exactly 90 degrees
+    private static final int TURN_90_MS = 600;
+
+    // Time in milliseconds for a 180 degree turn
+    private static final int TURN_180_MS = 1200;
+
+    // Safety stop distance in cm
+    private static final double SAFETY_DISTANCE_CM = 15.0;
+
+    // -----------------------------------------------------------------------
+    // LED colour arrays (RGB format for fillUnderlights)
+    // -----------------------------------------------------------------------
+
+    private static final int[] GREEN_RGB = {0, 255, 0};
+    private static final int[] BLUE_RGB  = {0, 0, 255};
+    private static final int[] RED_RGB   = {255, 0, 0};
+
+    // -----------------------------------------------------------------------
+    // Position tracking for straight-line distance calculation
+    // Direction: 0 = North, 1 = East, 2 = South, 3 = West
+    // -----------------------------------------------------------------------
+
+    private ArrayList<String> turnHistory;
+    private int direction;
+    private double x;
+    private double y;
+    private double endX;
+    private double endY;
+
+    // Timing for the outward journey
+    private long outwardStartMs;
+    private long outwardEndMs;
+
+    // Button flags - set by button callbacks
+    private boolean yPressed;
+    private boolean xPressed;
+
+    // -----------------------------------------------------------------------
+    // Constructor
+    // -----------------------------------------------------------------------
+
+    public ZigzagRobot(SwiftBotAPI api, boolean safetyEnabled) {
+        this.api = api;
+        this.safetyEnabled = safetyEnabled;
+        this.turnHistory = new ArrayList<String>();
+        this.yPressed = false;
+        this.xPressed = false;
+    }
+
+    // =======================================================================
+    // QR CODE SCANNING
+    // =======================================================================
+
+    /**
+     * Scans for a QR code using the SwiftBot camera.
+     * Keeps trying every 500ms until a QR code is successfully read.
+     */
+    public String scanQRCode() {
+        String qrData = "";
+
+        while (qrData.isEmpty()) {
+            try {
+                BufferedImage img = api.getQRImage();
+                qrData = api.decodeQRImage(img);
+            } catch (IllegalArgumentException e) {
+                // No QR code found in the image, try again
+            } catch (Exception e) {
+                // Other camera error, try again
+            }
+
+            // Wait before trying again
+            if (qrData.isEmpty()) {
+                sleep(500);
+            }
+        }
+
+        return qrData;
+    }
+
+    // =======================================================================
+    // BUTTON HANDLING
+    // =======================================================================
+
+    /**
+     * Waits for the user to press button Y or button X.
+     * Returns "Y" or "X" depending on which button was pressed.
+     */
+    public String waitForYOrX() {
+        yPressed = false;
+        xPressed = false;
+
+        api.enableButton(Button.Y, () -> { yPressed = true; });
+        api.enableButton(Button.X, () -> { xPressed = true; });
+
+        // Wait until one of the buttons is pressed
+        while (!yPressed && !xPressed) {
+            sleep(100);
+        }
+
+        api.disableAllButtons();
+
+        if (yPressed) {
+            return "Y";
+        }
+        return "X";
+    }
+
+    // =======================================================================
+    // OUTWARD ZIGZAG JOURNEY
+    // =======================================================================
+
+    /**
+     * Runs the full outward zigzag movement.
+     * Tracks position and turn history so returnToStart() can retrace the path.
+     */
+    public void runOutwardZigzag(JourneySettings settings, ZigzagUI ui) {
+        // Reset position tracking for this journey
+        x = 0;
+        y = 0;
+        direction = 0;  // start facing North
+        turnHistory = new ArrayList<String>();
+        boolean turnLeftNext = true;  // first turn will be left
+
+        outwardStartMs = System.currentTimeMillis();
+
+        for (int section = 1; section <= settings.getCount(); section++) {
+
+            // Set LED colour: odd sections = green, even sections = blue
+            if (section % 2 != 0) {
+                setGreenLEDs();
+                ui.showSectionStart(section, settings.getCount(), "Green");
+            } else {
+                setBlueLEDs();
+                ui.showSectionStart(section, settings.getCount(), "Blue");
+            }
+
+            // Move forward one section length
+            moveForward(settings.getLength(), settings.getSpeed(), ui);
+
+            // Update the x/y position based on current direction
+            updatePosition(settings.getLength());
+
+            // Stop for 1 second between sections
+            // After the last section, no turn is needed
+            if (section < settings.getCount()) {
+                sleep(1000);
+
+                // Turn 90 degrees, alternating left and right
+                if (turnLeftNext) {
+                    turnLeft90();
+                    sleep(500);  // wait for turn to fully complete
+                    turnHistory.add("L");
+                    ui.showTurning("left");
+                } else {
+                    turnRight90();
+                    sleep(500);  // wait for turn to fully complete
+                    turnHistory.add("R");
+                    ui.showTurning("right");
+                }
+
+                // Update direction after the turn
+                String lastTurn = turnHistory.get(turnHistory.size() - 1);
+                updateDirectionAfterTurn(lastTurn);
+
+                // Flip the turn direction for next time
+                turnLeftNext = !turnLeftNext;
+            }
+        }
+
+        outwardEndMs = System.currentTimeMillis();
+
+        // Store the end position for straight-line distance calculation
+        endX = x;
+        endY = y;
+
+        ui.showOutwardComplete();
+    }
+
+    // =======================================================================
+    // RETURN TO START
+    // =======================================================================
+
+    /**
+     * Retraces the outward path back to the starting position.
+     *
+     * The outward journey for 4 sections looks like:
+     *   section1 -> turnL -> section2 -> turnR -> section3 -> turnL -> section4
+     *
+     * To retrace, we turn 180 first, then go backwards through each section:
+     *   [180 turn] -> section4 -> mirrorL(=turnR) -> section3 -> mirrorR(=turnL)
+     *               -> section2 -> mirrorL(=turnR) -> section1
+     *
+     * LED colours match the original section they are retracing.
+     */
+    public void returnToStart(JourneySettings settings, ZigzagUI ui) {
+        ui.showReturning();
+
+        // Turn 180 degrees to face back the way we came
+        turn180();
+        sleep(500);  // wait for turn to complete
+
+        int count = settings.getCount();
+
+        // We retrace from the last section back to the first
+        // The turn history has (count - 1) entries (one turn between each pair of sections)
+        // We replay them in reverse, with each turn mirrored
+
+        for (int section = count; section >= 1; section--) {
+
+            // Set LEDs to match the original section colour
+            setLEDsForSection(section);
+
+            // Move forward one section
+            moveForward(settings.getLength(), settings.getSpeed(), ui);
+
+            // If this isn't the first section, we need to turn before the next retrace
+            if (section > 1) {
+                sleep(1000);
+
+                // The turn history index: turn at index (section - 2) was the turn
+                // that happened AFTER outward section (section - 1)
+                // We mirror it: L becomes R, R becomes L
+                String originalTurn = turnHistory.get(section - 2);
+
+                if (originalTurn.equals("L")) {
+                    turnRight90();
+                    sleep(500);
+                    ui.showTurning("right (mirrored)");
+                } else {
+                    turnLeft90();
+                    sleep(500);
+                    ui.showTurning("left (mirrored)");
+                }
+            }
+        }
+
+        // Turn off all LEDs and stop
+        turnOffLEDs();
+        ui.showJourneyComplete();
+    }
+
+    // =======================================================================
+    // DISTANCE AND TIMING GETTERS
+    // =======================================================================
+
+    public double getEndX() {
+        return endX;
+    }
+
+    public double getEndY() {
+        return endY;
+    }
+
+    /**
+     * Calculates the straight-line distance from start (0,0) to the end position.
+     * Uses Pythagoras: distance = sqrt(x^2 + y^2)
+     */
+    public double getStraightLineDistance() {
+        return Math.sqrt(endX * endX + endY * endY);
+    }
+
+    /**
+     * Returns how long the outward journey took in seconds.
+     */
+    public double getOutwardDurationSeconds() {
+        return (outwardEndMs - outwardStartMs) / 1000.0;
+    }
+
+    // =======================================================================
+    // PRIVATE MOVEMENT METHODS
+    // =======================================================================
+
+    /**
+     * Moves the robot forward by the given distance in cm.
+     * Uses startMove to begin, sleeps for the calculated time, then stopMove.
+     * If safety mode is on, checks the ultrasound sensor while moving.
+     */
+    private void moveForward(int distanceCm, int speed, ZigzagUI ui) {
+        // Calculate left and right wheel speeds using trim values
+        int leftSpeed = (int)(speed * LEFT_TRIM);
+        int rightSpeed = (int)(speed * RIGHT_TRIM);
+
+        // Make sure speeds don't exceed 100
+        if (leftSpeed > 100) leftSpeed = 100;
+        if (rightSpeed > 100) rightSpeed = 100;
+
+        // Calculate how long to move for
+        int moveTimeMs = calcMoveTimeMs(distanceCm, speed);
+        System.out.println("[DEBUG] Moving " + distanceCm + "cm at speed " + speed
+            + " for " + moveTimeMs + "ms");
+
+        if (!safetyEnabled) {
+            // Simple move: start, wait, then stop
+            api.startMove(leftSpeed, rightSpeed);
+            sleep(moveTimeMs);
+            api.stopMove();
+        } else {
+            // Move with safety checks on ultrasound sensor
+            long startTime = System.currentTimeMillis();
+            long elapsed = 0;
+
+            api.startMove(leftSpeed, rightSpeed);
+
+            while (elapsed < moveTimeMs) {
+
+                // Read the sensor safely (returns 999.0 if sensor fails)
+                double obstacle = readUltrasoundSafe();
+
+                // Only react if the reading looks real and is within danger zone
+                if (obstacle > 0 && obstacle < SAFETY_DISTANCE_CM) {
+                    // Stop the robot immediately
+                    api.stopMove();
+                    ui.showObstacleDetected();
+
+                    // Blink red LEDs 3 times to warn the user
+                    for (int i = 0; i < 3; i++) {
+                        setRedLEDs();
+                        sleep(300);
+                        turnOffLEDs();
+                        sleep(300);
+                    }
+
+                    // Wait until obstacle is removed (keep checking)
+                    boolean blocked = true;
+                    while (blocked) {
+                        setRedLEDs();
+                        sleep(500);
+                        turnOffLEDs();
+                        sleep(500);
+
+                        double check = readUltrasoundSafe();
+                        // If sensor says clear (or sensor failed), continue
+                        if (check >= SAFETY_DISTANCE_CM) {
+                            blocked = false;
+                        }
+                    }
+
+                    // Resume movement
+                    turnOffLEDs();
+                    ui.showPathClear();
+                    api.startMove(leftSpeed, rightSpeed);
+                }
+
+                // Wait 200ms before checking sensor again
+                sleep(200);
+
+                // Update how much time has passed
+                elapsed = System.currentTimeMillis() - startTime;
+            }
+
+            // Make sure motors are stopped
+            api.stopMove();
+        }
+    }
+
+    /**
+     * Reads the ultrasound sensor safely.
+     * If the sensor throws an error, returns 999.0 (meaning "no obstacle").
+     * The API docs say it returns around 1219 when a reading fails,
+     * so we treat anything above 1000 as "no obstacle" too.
+     */
+    private double readUltrasoundSafe() {
+        try {
+            double reading = api.useUltrasound();
+            // API returns ~1219 when reading fails (nothing to bounce off)
+            if (reading > 1000) {
+                return 999.0;
+            }
+            return reading;
+        } catch (Exception e) {
+            System.out.println("[DEBUG] Ultrasound timeout - skipping.");
+            return 999.0;
+        }
+    }
+
+    // =======================================================================
+    // PRIVATE TURN METHODS
+    // =======================================================================
+
+    /**
+     * Turns the robot 90 degrees to the left.
+     * Left wheel goes backward, right wheel goes forward.
+     */
+    private void turnLeft90() {
+        api.startMove(-TURN_SPEED, TURN_SPEED);
+        sleep(TURN_90_MS);
+        api.stopMove();
+    }
+
+    /**
+     * Turns the robot 90 degrees to the right.
+     * Left wheel goes forward, right wheel goes backward.
+     */
+    private void turnRight90() {
+        api.startMove(TURN_SPEED, -TURN_SPEED);
+        sleep(TURN_90_MS);
+        api.stopMove();
+    }
+
+    /**
+     * Turns the robot 180 degrees.
+     */
+    private void turn180() {
+        api.startMove(-TURN_SPEED, TURN_SPEED);
+        sleep(TURN_180_MS);
+        api.stopMove();
+    }
+
+    // =======================================================================
+    // PRIVATE LED METHODS
+    // =======================================================================
+
+    private void setGreenLEDs() {
+        api.disableUnderlights();
+        api.fillUnderlights(GREEN_RGB);
+    }
+
+    private void setBlueLEDs() {
+        api.disableUnderlights();
+        api.fillUnderlights(BLUE_RGB);
+    }
+
+    private void setRedLEDs() {
+        api.disableUnderlights();
+        api.fillUnderlights(RED_RGB);
+    }
+
+    private void turnOffLEDs() {
+        api.disableUnderlights();
+    }
+
+    /**
+     * Sets LED colour based on the original section number.
+     * Odd sections = green, even sections = blue.
+     */
+    private void setLEDsForSection(int sectionNumber) {
+        if (sectionNumber % 2 != 0) {
+            setGreenLEDs();
+        } else {
+            setBlueLEDs();
+        }
+    }
+
+    // =======================================================================
+    // PRIVATE POSITION TRACKING METHODS
+    // =======================================================================
+
+    /**
+     * Updates the x/y position based on the current direction and distance moved.
+     * Direction: 0 = North (+y), 1 = East (+x), 2 = South (-y), 3 = West (-x)
+     */
+    private void updatePosition(int distanceCm) {
+        switch (direction) {
+            case 0: y += distanceCm; break;  // North
+            case 1: x += distanceCm; break;  // East
+            case 2: y -= distanceCm; break;  // South
+            case 3: x -= distanceCm; break;  // West
+        }
+    }
+
+    /**
+     * Updates the direction after a turn.
+     * Left turn: direction decreases by 1 (mod 4)
+     * Right turn: direction increases by 1 (mod 4)
+     */
+    private void updateDirectionAfterTurn(String turn) {
+        if (turn.equals("L")) {
+            direction = (direction + 3) % 4;  // turning left = -1 mod 4
+        } else {
+            direction = (direction + 1) % 4;  // turning right = +1 mod 4
+        }
+    }
+
+    // =======================================================================
+    // PRIVATE UTILITY METHODS
+    // =======================================================================
+
+    /**
+     * Calculates move time in milliseconds for a given distance and speed.
+     */
+    private int calcMoveTimeMs(int distanceCm, int speed) {
+        double cmPerSec = (speed / 100.0) * CM_PER_SEC_AT_100;
+        double seconds = distanceCm / cmPerSec;
+        return (int)(seconds * 1000);
+    }
+
+    /**
+     * Pauses the program for the given number of milliseconds.
+     */
+    private void sleep(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            // Interrupted, continue
+        }
+    }
+}
