@@ -1,0 +1,69 @@
+package src;
+/**
+ * InputValidator checks that the QR code data is in the correct format
+ * and that the values are within the allowed ranges.
+ *
+ * Expected format: "Value1-Value2"
+ * - Value1 (length): between 15 and 85 cm
+ * - Value2 (count): even number, no more than 12
+ */
+public class InputValidator {
+
+    // Error code constants so Main knows what went wrong
+    public static final int VALID = 0;
+    public static final int ERR_FORMAT = 1;
+    public static final int ERR_NOT_NUMBERS = 2;
+    public static final int ERR_LENGTH_RANGE = 3;
+    public static final int ERR_COUNT_RANGE = 4;
+
+    private int parsedLength;
+    private int parsedCount;
+
+    /**
+     * Validates the QR code string.
+     * Returns VALID (0) if everything is ok, or an error code if not.
+     */
+    public int validate(String qrData) {
+
+        // Check the string is not empty and contains a '-'
+        if (qrData == null || !qrData.contains("-")) {
+            return ERR_FORMAT;
+        }
+
+        // Split on the '-' character
+        String[] parts = qrData.split("-");
+
+        // Must have exactly two parts
+        if (parts.length != 2 || parts[0].isEmpty() || parts[1].isEmpty()) {
+            return ERR_FORMAT;
+        }
+
+        // Try to convert both parts to integers
+        try {
+            parsedLength = Integer.parseInt(parts[0].trim());
+            parsedCount = Integer.parseInt(parts[1].trim());
+        } catch (NumberFormatException e) {
+            return ERR_NOT_NUMBERS;
+        }
+
+        // Length must be between 15 and 85
+        if (parsedLength < 15 || parsedLength > 85) {
+            return ERR_LENGTH_RANGE;
+        }
+
+        // Count must be even, greater than 0, and no more than 12
+        if (parsedCount <= 0 || parsedCount % 2 != 0 || parsedCount > 12) {
+            return ERR_COUNT_RANGE;
+        }
+
+        return VALID;
+    }
+
+    public int getLength() {
+        return parsedLength;
+    }
+
+    public int getCount() {
+        return parsedCount;
+    }
+}
