@@ -1,0 +1,139 @@
+package src;
+import swiftbot.*;
+import java.util.Scanner;
+
+/**
+ * Main is the entry point for the SwiftBot ZigZag program.
+ *
+ * It controls the overall flow of the program:
+ * 1. Set up the SwiftBot and ask about safety mode
+ * 2. Loop: scan QR code, validate, execute zigzag, log, repeat or exit
+ * 3. Display session summary before ending
+ *
+ * Classes used:
+ *   ZigzagUI        - displays messages to the user
+ *   InputValidator   - checks the QR code data is valid
+ *   JourneySettings  - stores settings for one journey (length, count, speed)
+ *   ZigzagRobot      - controls the robot hardware (movement, LEDs, sensors)
+ *   JourneyLogger    - writes journey data to a text file
+ *   SessionStats     - tracks stats across multiple journeys
+ */
+public class Main {
+
+    public static void main(String[] args) {
+
+        // -- Setup ----------------------------------------------------------
+
+        // Get the SwiftBot API instance (singleton - cannot use new)
+        SwiftBotAPI api = SwiftBotAPI.INSTANCE;
+
+        // Create all the helper objects
+        ZigzagUI ui = new ZigzagUI();
+        InputValidator validator = new InputValidator();
+        JourneyLogger logger = new JourneyLogger();
+        SessionStats stats = new SessionStats();
+
+        // Show the title and welcome message
+        ui.showTitle();
+        ui.showStartMessage();
+
+        // Ask if the user wants to enable safety mode (keyboard input)
+        Scanner keyboard = new Scanner(System.in);
+        System.out.print("[CONFIG] Enable proximity safety mode? (Y/N): ");
+        String safetyInput = keyboard.nextLine().trim().toUpperCase();
+        boolean safetyEnabled = safetyInput.equals("Y");
+
+        if (safetyEnabled) {
+            ui.showSafetyEnabled();
+        } else {
+            ui.showSafetyDisabled();
+        }
+
+        // Create the robot with the API and safety setting
+        ZigzagRobot robot = new ZigzagRobot(api, safetyEnabled);
+
+        // -- Main program loop ----------------------------------------------
+
+        boolean running = true;
+
+        while (running) {
+
+            // 1) Scan and validate QR code
+            JourneySettings settings = null;
+
+            while (settings == null) {
+
+                // Scan the QR code using the robot's camera
+                ui.showScanPrompt();
+                String qrData = robot.scanQRCode();
+                ui.showQRDetected(qrData);
+
+                // Validate the scanned data
+                int result = validator.validate(qrData);
+
+                if (result == InputValidator.VALID) {
+                    // Create the journey settings (this also generates the random speed)
+                    settings = new JourneySettings(
+                        validator.getLength(),
+                        validator.getCount()
+                    );
+                    ui.showValidationSuccess(
+                        settings.getLength(),
+                        settings.getCount(),
+                        settings.getSpeed()
+                    );
+                } else if (result == InputValidator.ERR_FORMAT) {
+                    ui.showInvalidFormatError();
+                } else if (result == InputValidator.ERR_NOT_NUMBERS) {
+                    ui.showInvalidNumbersError();
+                } else if (result == InputValidator.ERR_LENGTH_RANGE) {
+                    ui.showLengthRangeError();
+                } else if (result == InputValidator.ERR_COUNT_RANGE) {
+                    ui.showCountRangeError();
+                }
+
+                // If invalid, the while loop repeats and scans again
+            }
+
+            // 2) Execute the outward zigzag journey
+            robot.runOutwardZigzag(settings, ui);
+
+            // 3) Return to the starting position
+            robot.returnToStart(settings, ui);
+
+            // 4) Calculate distances and duration
+            double outwardDistance = settings.getTotalOutwardDistance();
+            double duration = robot.getOutwardDurationSeconds();
+            double straightLine = robot.getStraightLineDistance();
+
+            // 5) Log the journey data to file
+            logger.logJourney(settings, outwardDistance, duration, straightLine);
+            ui.showLoggingSuccess(outwardDistance, duration, straightLine, logger.getLogPath());
+
+            // 6) Update the session statistics
+            stats.update(settings, straightLine);
+
+            // 7) Ask user to continue or exit using buttons Y and X
+            ui.showContinuePrompt();
+            String buttonPressed = robot.waitForYOrX();
+
+            if (buttonPressed.equals("X")) {
+                running = false;
+            }
+            // If "Y", the while loop repeats and starts a new journey
+        }
+
+        // -- Session summary on exit ----------------------------------------
+
+        ui.showSessionSummary(
+            stats.getTotalJourneys(),
+            stats.getMaxLength(), stats.getMaxCount(), stats.getMaxStraightLineDist(),
+            stats.getMinLength(), stats.getMinCount(), stats.getMinStraightLineDist(),
+            logger.getLogPath()
+        );
+
+        // Clean up and exit
+        keyboard.close();
+        System.exit(1);
+    }
+}
