@@ -1,0 +1,91 @@
+package src;
+/**
+ * SessionStats keeps track of all journeys completed in one session.
+ * It records the longest and shortest straight-line distances
+ * so they can be displayed in the session summary at the end.
+ */
+public class SessionStats {
+
+    private int totalJourneys;
+
+    // Longest journey details
+    private double maxStraightLineDist;
+    private int maxLength;
+    private int maxCount;
+
+    // Shortest journey details
+    private double minStraightLineDist;
+    private int minLength;
+    private int minCount;
+
+    public SessionStats() {
+        totalJourneys = 0;
+        maxStraightLineDist = -1;   // will be replaced on first journey
+        minStraightLineDist = -1;   // will be replaced on first journey
+    }
+
+    /**
+     * Updates the session stats after a journey is completed.
+     */
+    public void update(JourneySettings settings, double straightLineDist) {
+        totalJourneys++;
+
+        // On the first journey, set both max and min to this journey
+        if (totalJourneys == 1) {
+            maxStraightLineDist = straightLineDist;
+            maxLength = settings.getLength();
+            maxCount = settings.getCount();
+
+            minStraightLineDist = straightLineDist;
+            minLength = settings.getLength();
+            minCount = settings.getCount();
+            return;
+        }
+
+        // Check if this is the new longest
+        if (straightLineDist > maxStraightLineDist) {
+            maxStraightLineDist = straightLineDist;
+            maxLength = settings.getLength();
+            maxCount = settings.getCount();
+        }
+
+        // Check if this is the new shortest
+        if (straightLineDist < minStraightLineDist) {
+            minStraightLineDist = straightLineDist;
+            minLength = settings.getLength();
+            minCount = settings.getCount();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Getters
+    // -----------------------------------------------------------------------
+
+    public int getTotalJourneys() {
+        return totalJourneys;
+    }
+
+    public double getMaxStraightLineDist() {
+        return maxStraightLineDist;
+    }
+
+    public int getMaxLength() {
+        return maxLength;
+    }
+
+    public int getMaxCount() {
+        return maxCount;
+    }
+
+    public double getMinStraightLineDist() {
+        return minStraightLineDist;
+    }
+
+    public int getMinLength() {
+        return minLength;
+    }
+
+    public int getMinCount() {
+        return minCount;
+    }
+}
